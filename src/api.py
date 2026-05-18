@@ -30,7 +30,7 @@ async def start_research(request: ResearchRequest):
     
     # We run the graph asynchronously
     # It will run until it hits the interrupt_before synthesis_node, or finishes.
-    app_graph.invoke(initial_state, config=config)
+    await app_graph.ainvoke(initial_state, config=config)
     
     return {"thread_id": thread_id, "status": "started"}
 
@@ -40,7 +40,7 @@ async def get_state(thread_id: str):
     Get the current state of a research thread.
     """
     config = {"configurable": {"thread_id": thread_id}}
-    state_snapshot = app_graph.get_state(config)
+    state_snapshot = await app_graph.aget_state(config)
     
     if not state_snapshot:
         raise HTTPException(status_code=404, detail="Thread not found")
@@ -64,22 +64,22 @@ async def resume_research(thread_id: str, request: ResumeRequest):
     If approve=False, feedback is injected and graph routes back to planning.
     """
     config = {"configurable": {"thread_id": thread_id}}
-    state_snapshot = app_graph.get_state(config)
+    state_snapshot = await app_graph.aget_state(config)
     
     if not state_snapshot or not state_snapshot.next:
         raise HTTPException(status_code=400, detail="Thread not found or not waiting")
         
     if request.approve:
         # Proceed with synthesis
-        app_graph.invoke(None, config=config)
+        await app_graph.ainvoke(None, config=config)
     else:
         # Update state with feedback and override is_sufficient to force loop back
-        app_graph.update_state(
+        await app_graph.aupdate_state(
             config,
             {"feedback": request.feedback, "is_sufficient": False},
             as_node="reflection_node" # Act as if reflection node outputted this
         )
         # Proceed
-        app_graph.invoke(None, config=config)
+        await app_graph.ainvoke(None, config=config)
         
     return {"status": "resumed"}
