@@ -7,3 +7,5 @@ python-dotenv
 httpx
 pytest
 uvicorn
+fastapi
+yt-dlp
