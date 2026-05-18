@@ -25,7 +25,7 @@ def reflection_node(state: ResearchState) -> Dict[str, Any]:
         ("user", "Original Query: {query}\n\nGathered Data:\n{data}")
     ])
     
-    llm = get_llm(provider="openai", model="gpt-4o-mini", temperature=0.1)
+    llm = get_llm(temperature=0.1)
     structured_llm = llm.with_structured_output(ReflectionOutput)
     
     chain = prompt | structured_llm

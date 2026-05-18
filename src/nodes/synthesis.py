@@ -24,7 +24,7 @@ def synthesis_node(state: ResearchState) -> Dict[str, Any]:
         ("user", "Original Query: {query}\n\nSources:\n{sources}")
     ])
     
-    llm = get_llm(provider="openai", model="gpt-4o", temperature=0.3)
+    llm = get_llm(temperature=0.3)
     chain = prompt | llm
     
     result = chain.invoke({

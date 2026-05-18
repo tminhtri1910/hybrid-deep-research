@@ -1,10 +1,11 @@
 import os
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
+from langchain_openrouter import ChatOpenRouter
 
 load_dotenv()
 
-def get_llm(provider: str = "openai", model: str = None, temperature: float = 0.7) -> ChatOpenAI:
+def get_llm(provider: str = "openrouter", model: str = None, temperature: float = 0.7) -> ChatOpenAI:
     """
     Returns a configured LangChain Chat model.
     By default, uses OpenAI. Can switch to OpenRouter by passing provider="openrouter".
@@ -16,15 +17,13 @@ def get_llm(provider: str = "openai", model: str = None, temperature: float = 0.
             api_key=os.getenv("OPENAI_API_KEY")
         )
     elif provider == "openrouter":
-        return ChatOpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=os.getenv("OPENROUTER_API_KEY"),
-            model=model or "openai/gpt-4o-mini",
+        from langchain_openrouter import ChatOpenRouter
+        return ChatOpenRouter(
+            openrouter_api_key=os.getenv("OPENROUTER_API_KEY"),
+            model_name=model or "nvidia/nemotron-3-super-120b-a12b:free",
             temperature=temperature,
-            default_headers={
-                "HTTP-Referer": "http://localhost:8000",
-                "X-Title": "Hybrid Deep Research",
-            }
+            app_url="http://localhost:8000",
+            app_title="Hybrid Deep Research"
         )
     else:
         raise ValueError(f"Unsupported provider: {provider}")

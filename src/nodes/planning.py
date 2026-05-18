@@ -23,7 +23,7 @@ def plan_research_node(state: ResearchState) -> Dict[str, Any]:
     ])
     
     # We use a structured output LLM (OpenAI API supports this)
-    llm = get_llm(provider="openai", model="gpt-4o-mini", temperature=0.2)
+    llm = get_llm(temperature=0.2)
     structured_llm = llm.with_structured_output(PlanningOutput)
     
     chain = prompt | structured_llm
