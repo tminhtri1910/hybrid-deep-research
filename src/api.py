@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import uuid
 from typing import Dict, Any, Optional
+import os
 
 from src.graph import app_graph
 from langchain_core.runnables import RunnableConfig
