@@ -23,7 +23,7 @@ async def scrape_webpage(url: str) -> str:
                 lines = (line.strip() for line in text.splitlines())
                 chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
                 text = "\n".join(chunk for chunk in chunks if chunk)
-                return text[:20000] # Limit raw text
+                return text[:50000] # Limit raw text
             return f"Error: Status {response.status_code}"
     except Exception as e:
         return f"Error scraping {url}: {str(e)}"
@@ -32,7 +32,7 @@ async def compress_document(text: str, query: str) -> str:
     """
     Compress a long document by extracting only the information relevant to the query.
     """
-    if len(text) < 500:
+    if len(text) < 1000:
         return text # Too short to compress
         
     prompt = ChatPromptTemplate.from_messages([
