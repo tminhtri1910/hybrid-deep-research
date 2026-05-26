@@ -33,7 +33,9 @@ jobs:
           # Compare origin/main with the current HEAD and output results to diff.json
           sem diff --from origin/main --to HEAD --format json > diff.json  
           # Expose the JSON output as a step output variable for potential downstream use
-          echo "diff_output=$(cat diff.json)" >> $GITHUB_OUTPUT  
+          echo "diff_output<<EOF" >> $GITHUB_OUTPUT
+          cat diff.json >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
   
       # Step 4: Parse the diff, run impact analysis on each changed entity, and generate a Markdown report
       - name: Extract impact for changed entities  
@@ -45,14 +47,16 @@ jobs:
           # Loop through each changed entity identified in the diff
           for entity in $(jq -r '.changes[].entityName' diff.json); do  
             echo "## Impact for $entity" >> impact_report.md  
-            # Run 'sem impact' for the entity; appending the results to impact.json (ignores errors)
-            sem impact "$entity" --json >> impact.json 2>&1 || true  
+            # Run 'sem impact' for the entity; saving the results to impact.json (ignores errors)
+            sem impact "$entity" --json > impact.json 2>&1 || true  
             # Extract impacted entities from impact.json and append them as list items to the report
             jq -r '.impact.entities[]? | "- \(.name) (\(.filePath))"' impact.json >> impact_report.md 2>&1 || true  
           done  
             
           # Expose the Markdown report content as a step output variable
-          echo "impact_report=$(cat impact_report.md)" >> $GITHUB_OUTPUT  
+          echo "impact_report<<EOF" >> $GITHUB_OUTPUT
+          cat impact_report.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
   
       # Step 5: Post the generated impact report as a comment on the pull request
       - name: Comment PR with impact report  
