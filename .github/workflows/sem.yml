@@ -1,0 +1,68 @@
+# Name of the GitHub Action workflow
+name: PR Impact Analysis  
+  
+# Trigger the workflow on pull requests targeting the 'main' branch
+on:  
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+  
+jobs:  
+  impact-analysis:  
+    # Run the job on the latest Ubuntu runner
+    runs-on: ubuntu-latest  
+    steps:  
+      # Step 1: Checkout the repository code
+      - uses: actions/checkout@v4  
+        with:  
+          # Fetch all history for all tags and branches (needed for accurate diffing)
+          fetch-depth: 0  
+  
+      # Step 2: Download and install the 'sem' CLI tool from Ataraxy-Labs
+      - name: Install sem  
+        run: |  
+          curl -L https://github.com/Ataraxy-Labs/sem/releases/latest/download/sem-linux-x86_64.tar.gz -o sem.tar.gz  
+          tar -xzf sem.tar.gz  
+          chmod +x sem  
+          # Move the executable to a directory in the system's PATH
+          sudo mv sem /usr/local/bin/  
+  
+      # Step 3: Run 'sem diff' to compute a semantic diff between the target branch and the PR
+      - name: Get semantic diff  
+        id: diff  
+        run: |  
+          # Compare origin/main with the current HEAD and output results to diff.json
+          sem diff --from origin/main --to HEAD --format json > diff.json  
+          # Expose the JSON output as a step output variable for potential downstream use
+          echo "diff_output=$(cat diff.json)" >> $GITHUB_OUTPUT  
+  
+      # Step 4: Parse the diff, run impact analysis on each changed entity, and generate a Markdown report
+      - name: Extract impact for changed entities  
+        id: impact  
+        run: |  
+          # Initialize the impact report Markdown file
+          echo "# Impact Analysis for PR" > impact_report.md  
+            
+          # Loop through each changed entity identified in the diff
+          for entity in $(jq -r '.changes[].entityName' diff.json); do  
+            echo "## Impact for $entity" >> impact_report.md  
+            # Run 'sem impact' for the entity; appending the results to impact.json (ignores errors)
+            sem impact "$entity" --json >> impact.json 2>&1 || true  
+            # Extract impacted entities from impact.json and append them as list items to the report
+            jq -r '.impact.entities[]? | "- \(.name) (\(.filePath))"' impact.json >> impact_report.md 2>&1 || true  
+          done  
+            
+          # Expose the Markdown report content as a step output variable
+          echo "impact_report=$(cat impact_report.md)" >> $GITHUB_OUTPUT  
+  
+      # Step 5: Post the generated impact report as a comment on the pull request
+      - name: Comment PR with impact report  
+        uses: actions/github-script@v7  
+        with:  
+          script: |  
+            # Use the GitHub REST API to create a comment on the current PR
+            github.rest.issues.createComment({  
+              issue_number: context.issue.number,  
+              owner: context.repo.owner,  
+              repo: context.repo.repo,  
+              body: '${{ steps.impact.outputs.impact_report }}'  
+            })
