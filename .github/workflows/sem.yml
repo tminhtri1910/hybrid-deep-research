@@ -67,7 +67,7 @@ jobs:
           DIFF_OUTPUT: ${{ steps.diff.outputs.diff_output }}
         with:  
           script: |  
-            # Use the GitHub REST API to create a comment on the current PR
+            // Use the GitHub REST API to create a comment on the current PR
             github.rest.issues.createComment({  
               issue_number: context.issue.number,  
               owner: context.repo.owner,  
