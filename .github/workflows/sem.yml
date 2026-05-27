@@ -90,12 +90,24 @@ jobs:
               
             # Get context with --file flag  
             if sem context "$entity_name" --file "$file_path" --json > context.json 2>/dev/null; then  
-              # Extract dependents with content  
+              # Extract dependents and format separately  
               jq -r '.entries[] |   
-                select(.role == "direct_dependent" or .role == "transitive_dependent") |  
-                "### \(.name) (\(.type))\nFile: \(.file)\nRole: \(.role)\n\`\`\`\n\(.content)\n\`\`\`"' \  
-                context.json >> dependents_report.md  
-            fi  
+                select(.role == "direct_dependent" or .role == "transitive_dependent") |   
+                @json' context.json | while read -r dep; do  
+                name=$(echo "$dep" | jq -r '.name')  
+                type=$(echo "$dep" | jq -r '.type')  
+                file=$(echo "$dep" | jq -r '.file')  
+                role=$(echo "$dep" | jq -r '.role')  
+                content=$(echo "$dep" | jq -r '.content')  
+                  
+                echo "### $name ($type)" >> dependents_report.md  
+                echo "File: $file" >> dependents_report.md  
+                echo "Role: $role" >> dependents_report.md  
+                echo '```' >> dependents_report.md  
+                echo "$content" >> dependents_report.md  
+                echo '```' >> dependents_report.md  
+              done  
+            fi 
               
             echo "" >> dependents_report.md  
           done
