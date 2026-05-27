@@ -38,33 +38,31 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
   
       # Step 4: Parse the diff, run impact analysis on each changed entity, and generate a Markdown report
-      # (TEMPORARILY COMMENTED OUT to test diff output first)
-      # - name: Extract impact for changed entities  
-      #   id: impact  
-      #   run: |  
-      #     # Initialize the impact report Markdown file
-      #     echo "# Impact Analysis for PR" > impact_report.md  
-      #       
-      #     # Loop through each changed entity identified in the diff
-      #     for entity in $(jq -r '.changes[].entityName' diff.json); do  
-      #       echo "## Impact for $entity" >> impact_report.md  
-      #       # Run 'sem impact' for the entity; saving the results to impact.json (ignores errors)
-      #       sem impact "$entity" --json > impact.json 2>&1 || true  
-      #       # Extract impacted entities from impact.json and append them as list items to the report
-      #       jq -r '.impact.entities[]? | "- \(.name) (\(.filePath))"' impact.json >> impact_report.md 2>&1 || true  
-      #     done  
-      #       
-      #     # Expose the Markdown report content as a step output variable
-      #     echo "impact_report<<EOF" >> $GITHUB_OUTPUT
-      #     cat impact_report.md >> $GITHUB_OUTPUT
-      #     echo "EOF" >> $GITHUB_OUTPUT
+      - name: Extract impact for changed entities  
+        id: impact  
+        run: |  
+          # Initialize the impact report Markdown file
+          echo "# Impact Analysis for PR" > impact_report.md  
+            
+          # Loop through each changed entity identified in the diff
+          for entity in $(jq -r '.changes[].entityName' diff.json); do  
+            echo "## Impact for $entity" >> impact_report.md  
+            # Run 'sem impact' for the entity; saving the results to impact.json (ignores errors)
+            sem impact "$entity" --json > impact.json 2>&1 || true  
+            # Extract impacted entities from impact.json and append them as list items to the report
+            jq -r '.impact.entities[]? | "- \(.name) (\(.filePath))"' impact.json >> impact_report.md 2>&1 || true  
+          done  
+            
+          # Expose the Markdown report content as a step output variable
+          echo "impact_report<<EOF" >> $GITHUB_OUTPUT
+          cat impact_report.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
   
       # Step 5: Post the generated impact report as a comment on the pull request
-      # (Modified to post diff output for testing)
-      - name: Comment PR with diff output  
+      - name: Comment PR with impact report  
         uses: actions/github-script@v7  
         env:
-          DIFF_OUTPUT: ${{ steps.diff.outputs.diff_output }}
+          IMPACT_REPORT: ${{ steps.impact.outputs.impact_report }}
         with:  
           script: |  
             // Use the GitHub REST API to create a comment on the current PR
@@ -72,5 +70,5 @@ jobs:
               issue_number: context.issue.number,  
               owner: context.repo.owner,  
               repo: context.repo.repo,  
-              body: '```json\n' + process.env.DIFF_OUTPUT + '\n```'
+              body: process.env.IMPACT_REPORT
             })
