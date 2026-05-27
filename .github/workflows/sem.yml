@@ -16,6 +16,7 @@ jobs:
         with:  
           # Fetch all history for all tags and branches (needed for accurate diffing)
           fetch-depth: 0  
+
   
       # Step 2: Download and install the 'sem' CLI tool from Ataraxy-Labs
       - name: Install sem  
@@ -26,67 +27,106 @@ jobs:
           # Move the executable to a directory in the system's PATH
           sudo mv sem /usr/local/bin/  
   
-      # Step 3: Run 'sem diff' to compute a semantic diff between the target branch and the PR
-      - name: Get semantic diff
-        id: diff
-        run: |
-          # Compare origin/main with the current HEAD and output results to diff.json
-          sem diff --from origin/${{ github.base_ref }} --to HEAD --format json > diff.json  
-          # Expose the JSON output as a step output variable for potential downstream use
-          echo "diff_output<<EOF" >> $GITHUB_OUTPUT
-          cat diff.json >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-  
-      - name: Extract dependents for changed entities  
-        id: dependents  
+      - name: Extract dependents with code content  
         run: |  
-          echo "# Dependents Analysis" > dependents_report.md  
+          python3 << 'EOF'  
+          import json  
+          import subprocess  
             
-          # Extract entity names from diff  
-          for entity in $(jq -r '.changes[].entityName' diff.json); do  
-            echo "## Dependents for: $entity" >> dependents_report.md  
-              
-            # Get json context and filter by role  
-            sem context "$entity" --json 2>/dev/null | jq '[.context[]? | select(.role == "direct_dependent" or .role == "transitive_dependent")]' >> dependents_report.json || true  
-          done 
+          # Get diff  
+          diff = json.loads(subprocess.check_output(['sem', 'diff', '--from', '${{ github.base_ref }}', '--to', 'HEAD', '--format', 'json']))  
+            
+          all_dependents_with_code = []  
+            
+          for change in diff['changes']:  
+              entity_name = change['entityName']  
+                
+              # Get context with full code content  
+              context = json.loads(subprocess.check_output(['sem', 'context', entity_name, '--json']))  
+                
+              # Filter dependents only (exclude target)  
+              dependents = [e for e in context['entries'] if e['role'] in ['direct_dependent', 'transitive_dependent']]  
+                
+              for dep in dependents:  
+                  all_dependents_with_code.append({  
+                      'changed_entity': entity_name,  
+                      'dependent': dep['name'],  
+                      'type': dep['type'],  
+                      'file': dep['file'],  
+                      'role': dep['role'],  
+                      'code': dep['content']  # Full code content  
+                  })  
+            
+          # Output  
+          with open('dependents_with_code.json', 'w') as f:  
+              json.dump(all_dependents_with_code, f, indent=2)  
+            
+          print(f"Found {len(all_dependents_with_code)} dependents with code")  
+          EOF
           
-          # Expose the JSON report as a step output variable
-          echo "dependents_report<<EOF" >> $GITHUB_OUTPUT
-          cat dependents_report.json >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      # # Step 4: Parse the diff, run impact analysis on each changed entity, and generate a Markdown report
-      # - name: Extract impact for changed entities  
-      #   id: impact  
-      #   run: |  
-      #     # Initialize the impact report Markdown file
-      #     echo "# Impact Analysis for PR" > impact_report.md  
-            
-      #     # Loop through each changed entity identified in the diff
-      #     for entity in $(jq -r '.changes[].entityName' diff.json); do  
-      #       echo "## Impact for $entity" >> impact_report.md  
-      #       # Run 'sem impact' for the entity; saving the results to impact.json (ignores errors)
-      #       sem impact "$entity" --json > impact.json 2>&1 || true  
-      #       # Extract impacted entities from impact.json and append them as list items to the report
-      #       jq -r '.impact.entities[]? | "- \(.name) (\(.filePath))"' impact.json >> impact_report.md 2>&1 || true  
-      #     done
-            
-      #     # Expose the Markdown report content as a step output variable
-      #     echo "impact_report<<EOF" >> $GITHUB_OUTPUT
-      #     cat impact_report.md >> $GITHUB_OUTPUT
+      # # Step 3: Run 'sem diff' to compute a semantic diff between the target branch and the PR
+      # - name: Get semantic diff
+      #   id: diff
+      #   run: |
+      #     # Compare origin/main with the current HEAD and output results to diff.json
+      #     sem diff --from origin/${{ github.base_ref }} --to HEAD --format json > diff.json  
+      #     # Expose the JSON output as a step output variable for potential downstream use
+      #     echo "diff_output<<EOF" >> $GITHUB_OUTPUT
+      #     cat diff.json >> $GITHUB_OUTPUT
       #     echo "EOF" >> $GITHUB_OUTPUT
   
-      # Step 5: Post the generated dependents report as a comment on the pull request
-      - name: Comment PR with dependents report  
-        uses: actions/github-script@v7  
-        env:
-          DEPENDENTS_REPORT: ${{ steps.dependents.outputs.dependents_report }}
-        with:  
-          script: |  
-            // Use the GitHub REST API to create a comment on the current PR
-            github.rest.issues.createComment({  
-              issue_number: context.issue.number,  
-              owner: context.repo.owner,  
-              repo: context.repo.repo,  
-              body: '```json\n' + process.env.DEPENDENTS_REPORT + '\n```'
-            })
+      # - name: Extract dependents for changed entities  
+      #   id: dependents  
+      #   run: |  
+      #     echo "# Dependents Analysis" > dependents_report.md  
+            
+      #     # Extract entity names from diff  
+      #     for entity in $(jq -r '.changes[].entityName' diff.json); do  
+      #       echo "## Dependents for: $entity" >> dependents_report.md  
+              
+      #       # Get context and filter by role  
+      #       sem context "$entity" --json 2>/dev/null | \  
+      #         jq -r '.context[] | select(.role == "direct_dependent" or .role == "transitive_dependent") |   
+      #                "- \(.entity) (\(.type)) in \(.file)"' >> dependents_report.md 2>&1 || true  
+      #       echo "" >> dependents_report.md  
+      #     done 
+          
+      #     # Expose the JSON report as a step output variable
+      #     echo "dependents_report<<EOF" >> $GITHUB_OUTPUT
+      #     cat dependents_report.json >> $GITHUB_OUTPUT
+      #     echo "EOF" >> $GITHUB_OUTPUT
+      # # # Step 4: Parse the diff, run impact analysis on each changed entity, and generate a Markdown report
+      # # - name: Extract impact for changed entities  
+      # #   id: impact  
+      # #   run: |  
+      # #     # Initialize the impact report Markdown file
+      # #     echo "# Impact Analysis for PR" > impact_report.md  
+            
+      # #     # Loop through each changed entity identified in the diff
+      # #     for entity in $(jq -r '.changes[].entityName' diff.json); do  
+      # #       echo "## Impact for $entity" >> impact_report.md  
+      # #       # Run 'sem impact' for the entity; saving the results to impact.json (ignores errors)
+      # #       sem impact "$entity" --json > impact.json 2>&1 || true  
+      # #       # Extract impacted entities from impact.json and append them as list items to the report
+      # #       jq -r '.impact.entities[]? | "- \(.name) (\(.filePath))"' impact.json >> impact_report.md 2>&1 || true  
+      # #     done
+            
+      # #     # Expose the Markdown report content as a step output variable
+      # #     echo "impact_report<<EOF" >> $GITHUB_OUTPUT
+      # #     cat impact_report.md >> $GITHUB_OUTPUT
+      # #     echo "EOF" >> $GITHUB_OUTPUT
+  
+      # # Step 5: Post the generated impact report as a comment on the pull request
+      # - name: Comment PR with impact report  
+      #   uses: actions/github-script@v7  
+      #   env:
+      #     IMPACT_REPORT: ${{ steps.impact.outputs.impact_report }}
+      #   with:  
+      #     script: |  
+      #       // Use the GitHub REST API to create a comment on the current PR
+      #       github.rest.issues.createComment({  
+      #         issue_number: context.issue.number,  
+      #         owner: context.repo.owner,  
+      #         repo: context.repo.repo,  
+      #         body: process.env.IMPACT_REPORT
+      #       })
