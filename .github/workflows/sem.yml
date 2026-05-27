@@ -34,7 +34,7 @@ jobs:
           import subprocess  
             
           # Get diff  
-          diff = json.loads(subprocess.check_output(['sem', 'diff', '--from', '${{ github.base_ref }}', '--to', 'HEAD', '--format', 'json']))  
+          diff = json.loads(subprocess.check_output(['sem', 'diff', '--from', 'origin/${{ github.base_ref }}', '--to', 'HEAD', '--format', 'json']))  
             
           all_dependents_with_code = []  
             
@@ -63,7 +63,7 @@ jobs:
             
           print(f"Found {len(all_dependents_with_code)} dependents with code")  
           EOF
-          
+
       # # Step 3: Run 'sem diff' to compute a semantic diff between the target branch and the PR
       # - name: Get semantic diff
       #   id: diff
