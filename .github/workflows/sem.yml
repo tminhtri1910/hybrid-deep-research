@@ -37,32 +37,50 @@ jobs:
           cat diff.json >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
   
-      # Step 4: Parse the diff, run impact analysis on each changed entity, and generate a Markdown report
-      - name: Extract impact for changed entities  
-        id: impact  
+      - name: Extract dependents for changed entities  
+        id: dependents  
         run: |  
-          # Initialize the impact report Markdown file
-          echo "# Impact Analysis for PR" > impact_report.md  
+          echo "# Dependents Analysis" > dependents_report.md  
             
-          # Loop through each changed entity identified in the diff
+          # Extract entity names from diff  
           for entity in $(jq -r '.changes[].entityName' diff.json); do  
-            echo "## Impact for $entity" >> impact_report.md  
-            # Run 'sem impact' for the entity; saving the results to impact.json (ignores errors)
-            sem impact "$entity" --json > impact.json 2>&1 || true  
-            # Extract impacted entities from impact.json and append them as list items to the report
-            jq -r '.impact.entities[]? | "- \(.name) (\(.filePath))"' impact.json >> impact_report.md 2>&1 || true  
-          done  
-            
-          # Expose the Markdown report content as a step output variable
-          echo "impact_report<<EOF" >> $GITHUB_OUTPUT
-          cat impact_report.md >> $GITHUB_OUTPUT
+            echo "## Dependents for: $entity" >> dependents_report.md  
+              
+            # Get json context and filter by role  
+            sem context "$entity" --json 2>/dev/null | jq '[.context[]? | select(.role == "direct_dependent" or .role == "transitive_dependent")]' >> dependents_report.json || true  
+          done 
+          
+          # Expose the JSON report as a step output variable
+          echo "dependents_report<<EOF" >> $GITHUB_OUTPUT
+          cat dependents_report.json >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+
+      # # Step 4: Parse the diff, run impact analysis on each changed entity, and generate a Markdown report
+      # - name: Extract impact for changed entities  
+      #   id: impact  
+      #   run: |  
+      #     # Initialize the impact report Markdown file
+      #     echo "# Impact Analysis for PR" > impact_report.md  
+            
+      #     # Loop through each changed entity identified in the diff
+      #     for entity in $(jq -r '.changes[].entityName' diff.json); do  
+      #       echo "## Impact for $entity" >> impact_report.md  
+      #       # Run 'sem impact' for the entity; saving the results to impact.json (ignores errors)
+      #       sem impact "$entity" --json > impact.json 2>&1 || true  
+      #       # Extract impacted entities from impact.json and append them as list items to the report
+      #       jq -r '.impact.entities[]? | "- \(.name) (\(.filePath))"' impact.json >> impact_report.md 2>&1 || true  
+      #     done
+            
+      #     # Expose the Markdown report content as a step output variable
+      #     echo "impact_report<<EOF" >> $GITHUB_OUTPUT
+      #     cat impact_report.md >> $GITHUB_OUTPUT
+      #     echo "EOF" >> $GITHUB_OUTPUT
   
-      # Step 5: Post the generated impact report as a comment on the pull request
-      - name: Comment PR with impact report  
+      # Step 5: Post the generated dependents report as a comment on the pull request
+      - name: Comment PR with dependents report  
         uses: actions/github-script@v7  
         env:
-          IMPACT_REPORT: ${{ steps.impact.outputs.impact_report }}
+          DEPENDENTS_REPORT: ${{ steps.dependents.outputs.dependents_report }}
         with:  
           script: |  
             // Use the GitHub REST API to create a comment on the current PR
@@ -70,5 +88,5 @@ jobs:
               issue_number: context.issue.number,  
               owner: context.repo.owner,  
               repo: context.repo.repo,  
-              body: process.env.IMPACT_REPORT
+              body: '```json\n' + process.env.DEPENDENTS_REPORT + '\n```'
             })
