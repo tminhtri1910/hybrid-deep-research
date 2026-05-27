@@ -40,9 +40,10 @@ jobs:
             
           for change in diff['changes']:  
               entity_name = change['entityName']  
+              file_path = change['filePath'] 
                 
               # Get context with full code content  
-              context = json.loads(subprocess.check_output(['sem', 'context', entity_name, '--json']))  
+              context = json.loads(subprocess.check_output(['sem', 'context', entity_name, '--file', file_path, '--json']))  
                 
               # Filter dependents only (exclude target)  
               dependents = [e for e in context['entries'] if e['role'] in ['direct_dependent', 'transitive_dependent']]  
@@ -95,6 +96,7 @@ jobs:
       #     echo "dependents_report<<EOF" >> $GITHUB_OUTPUT
       #     cat dependents_report.json >> $GITHUB_OUTPUT
       #     echo "EOF" >> $GITHUB_OUTPUT
+
       # # # Step 4: Parse the diff, run impact analysis on each changed entity, and generate a Markdown report
       # # - name: Extract impact for changed entities  
       # #   id: impact  
