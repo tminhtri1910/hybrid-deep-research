@@ -43,7 +43,7 @@ jobs:
               file_path = change['filePath'] 
                 
               # Get context with full code content  
-              context = json.loads(subprocess.check_output(['sem', 'context', entity_name, '--file', file_path, '--json']))  
+              context = json.loads(subprocess.check_output(['sem', 'context', f'"{entity_name}"', '--file', f'"{file_path}"', '--json']))  
                 
               # Filter dependents only (exclude target)  
               dependents = [e for e in context['entries'] if e['role'] in ['direct_dependent', 'transitive_dependent']]  
