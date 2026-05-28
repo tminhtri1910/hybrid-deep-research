@@ -12,7 +12,7 @@ def get_llm(provider: str = "openrouter", model: str = None, temperature: float 
     """
     if provider == "openai":
         return ChatOpenAI(
-            model=model or "gpt-4o-mini",
+            model=model or "gpt-5-nano",
             temperature=temperature,
             api_key=os.getenv("OPENAI_API_KEY")
         )
