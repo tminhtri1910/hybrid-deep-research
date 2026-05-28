@@ -26,44 +26,6 @@ jobs:
           chmod +x sem  
           # Move the executable to a directory in the system's PATH
           sudo mv sem /usr/local/bin/  
-  
-      # - name: Extract dependents with code content  
-      #   run: |  
-      #     python3 << 'EOF'  
-      #     import json  
-      #     import subprocess  
-            
-      #     # Get diff  
-      #     diff = json.loads(subprocess.check_output(['sem', 'diff', '--from', 'origin/${{ github.base_ref }}', '--to', 'HEAD', '--format', 'json']))  
-            
-      #     all_dependents_with_code = []  
-            
-      #     for change in diff['changes']:  
-      #         entity_name = change['entityName']  
-      #         file_path = change['filePath'] 
-                
-      #         # Get context with full code content  
-      #         context = json.loads(subprocess.check_output(['sem', 'context', f'"{entity_name}"', '--file', f'"{file_path}"', '--json']))  
-                
-      #         # Filter dependents only (exclude target)  
-      #         dependents = [e for e in context['entries'] if e['role'] in ['direct_dependent', 'transitive_dependent']]  
-                
-      #         for dep in dependents:  
-      #             all_dependents_with_code.append({  
-      #                 'changed_entity': entity_name,  
-      #                 'dependent': dep['name'],  
-      #                 'type': dep['type'],  
-      #                 'file': dep['file'],  
-      #                 'role': dep['role'],  
-      #                 'code': dep['content']  # Full code content  
-      #             })  
-            
-      #     # Output  
-      #     with open('dependents_with_code.json', 'w') as f:  
-      #         json.dump(all_dependents_with_code, f, indent=2)  
-            
-      #     print(f"Found {len(all_dependents_with_code)} dependents with code")  
-      #     EOF
 
       # Step 3: Run 'sem diff' to compute a semantic diff between the target branch and the PR
       - name: Get semantic diff
@@ -76,7 +38,8 @@ jobs:
           cat diff.json >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Extract dependents with code content (Bash)  
+      # Step 4: Extract dependents
+      - name: Extract dependents with code content (Markdown)  
         id: dependents  
         run: |  
           echo "# Dependents with Code Content" > dependents_report.md  
@@ -117,6 +80,91 @@ jobs:
           cat dependents_report.md >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
           
+      - name: Extract dependents with code content (JSON)
+        id: dependents_json
+        run: |  
+          echo '{"dependents": [' > dependents.json  
+            
+          jq -c '.changes[]' diff.json | while read -r change; do  
+            entity_name=$(echo "$change" | jq -r '.entityName')  
+            file_path=$(echo "$change" | jq -r '.filePath')  
+              
+            if sem context "$entity_name" --file "$file_path" --json > context.json 2>/dev/null; then  
+              # Extract dependents as JSON  
+              jq -c '.entries[] |   
+                select(.role == "direct_dependent" or .role == "transitive_dependent")' \  
+                context.json | while read -r dep; do  
+                  
+                # Add changed_entity field  
+                echo "$dep" | jq -c --arg changed "$entity_name" \  
+                  '. + {changed_entity: $changed}'  
+                  
+              done  
+            fi  
+          done | paste -sd ',' - >> dependents.json  
+            
+          echo ']}' >> dependents.json
+
+          # Expose the JSON output as a step output variable
+          echo "dependents_report<<EOF" >> $GITHUB_OUTPUT
+          cat dependents.json >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      # Step 5: Post the generated impact report as a comment on the pull request
+      - name: Comment PR with impact report  
+        uses: actions/github-script@v7  
+        env:
+          # IMPACT_REPORT: ${{ steps.impact.outputs.impact_report }}
+          IMPACT_REPORT: ${{ steps.dependents_json.outputs.dependents_report }}
+        with:  
+          script: |  
+            // Use the GitHub REST API to create a comment on the current PR
+            github.rest.issues.createComment({  
+              issue_number: context.issue.number,  
+              owner: context.repo.owner,  
+              repo: context.repo.repo,  
+              body: process.env.IMPACT_REPORT
+            })
+
+      # - name: Extract dependents with code content  
+      #   run: |  
+      #     python3 << 'EOF'  
+      #     import json  
+      #     import subprocess  
+            
+      #     # Get diff  
+      #     diff = json.loads(subprocess.check_output(['sem', 'diff', '--from', 'origin/${{ github.base_ref }}', '--to', 'HEAD', '--format', 'json']))  
+            
+      #     all_dependents_with_code = []  
+            
+      #     for change in diff['changes']:  
+      #         entity_name = change['entityName']  
+      #         file_path = change['filePath'] 
+                
+      #         # Get context with full code content  
+      #         context = json.loads(subprocess.check_output(['sem', 'context', f'"{entity_name}"', '--file', f'"{file_path}"', '--json']))  
+                
+      #         # Filter dependents only (exclude target)  
+      #         dependents = [e for e in context['entries'] if e['role'] in ['direct_dependent', 'transitive_dependent']]  
+                
+      #         for dep in dependents:  
+      #             all_dependents_with_code.append({  
+      #                 'changed_entity': entity_name,  
+      #                 'dependent': dep['name'],  
+      #                 'type': dep['type'],  
+      #                 'file': dep['file'],  
+      #                 'role': dep['role'],  
+      #                 'code': dep['content']  # Full code content  
+      #             })  
+            
+      #     # Output  
+      #     with open('dependents_with_code.json', 'w') as f:  
+      #         json.dump(all_dependents_with_code, f, indent=2)  
+            
+      #     print(f"Found {len(all_dependents_with_code)} dependents with code")  
+      #     EOF
+
+
       # - name: Extract dependents for changed entities  
       #   id: dependents  
       #   run: |  
@@ -159,18 +207,4 @@ jobs:
       # #     cat impact_report.md >> $GITHUB_OUTPUT
       # #     echo "EOF" >> $GITHUB_OUTPUT
   
-      # Step 5: Post the generated impact report as a comment on the pull request
-      - name: Comment PR with impact report  
-        uses: actions/github-script@v7  
-        env:
-          # IMPACT_REPORT: ${{ steps.impact.outputs.impact_report }}
-          IMPACT_REPORT: ${{ steps.dependents.outputs.dependents_report }}
-        with:  
-          script: |  
-            // Use the GitHub REST API to create a comment on the current PR
-            github.rest.issues.createComment({  
-              issue_number: context.issue.number,  
-              owner: context.repo.owner,  
-              repo: context.repo.repo,  
-              body: process.env.IMPACT_REPORT
-            })
+      
