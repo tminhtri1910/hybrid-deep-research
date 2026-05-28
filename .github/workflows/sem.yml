@@ -91,13 +91,10 @@ jobs:
               
             if sem context "$entity_name" --file "$file_path" --json > context.json 2>/dev/null; then  
               # Extract dependents as JSON  
-              jq -c '.entries[] |   
-                select(.role == "direct_dependent" or .role == "transitive_dependent")' \  
-                context.json | while read -r dep; do  
+              jq -c '.entries[] | select(.role == "direct_dependent" or .role == "transitive_dependent")' context.json | while read -r dep; do  
                   
                 # Add changed_entity field  
-                echo "$dep" | jq -c --arg changed "$entity_name" \  
-                  '. + {changed_entity: $changed}'  
+                echo "$dep" | jq -c --arg changed "$entity_name" '. + {changed_entity: $changed}'  
                   
               done  
             fi  
